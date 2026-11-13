@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edexcel IGCSE · Nuclear Reactor — Interactive</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #e8ecf2; display: flex; justify-content: center; align-items: flex-start;
+    min-height: 100vh; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; padding: 18px;
+  }
+  .exam-paper {
+    background: #fff; border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.15);
+    padding: 18px 22px 20px 22px; max-width: 960px; width: fit-content;
+  }
+  canvas { display: block; border-radius: 6px; background: #fff; border: 1px solid #d0d7e2; margin: 0 auto; }
+  .controls-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px;
+    margin-top: 14px; padding: 8px 4px 2px 4px; border-top: 1px solid #e2e8f0;
+    font-size: 0.82rem; color: #1e293b;
+  }
+  .control-item { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .control-item label { font-weight: 600; font-size: 0.78rem; color: #334155; min-width: 82px; }
+  input[type="range"] { width: 120px; accent-color: #1e3a8a; cursor: pointer; }
+  .value-badge {
+    font-size: 0.72rem; font-weight: 600; background: #eef2f8; padding: 2px 9px;
+    border-radius: 30px; color: #1e3a8a; min-width: 46px; text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  button {
+    background: #1e3a8a; color: #fff; border: none; font-weight: 600;
+    font-size: 0.76rem; padding: 6px 14px; border-radius: 30px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  button:hover { background: #152c6e; }
+  button.reset { background: #64748b; }
+  button.reset:hover { background: #475569; }
+  .temp-readout {
+    display: flex; align-items: center; gap: 6px; margin-left: auto;
+    font-weight: 600; font-size: 0.8rem; color: #0f172a; background: #f1f5f9;
+    padding: 4px 14px; border-radius: 30px; border: 1px solid #dde3ed;
+  }
+  .temp-readout span:first-child { color: #b91c1c; font-size: 0.72rem; }
+  .temp-value { font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; color: #b91c1c; }
+  .explain-panel {
+    margin-top: 16px; background: linear-gradient(135deg,#f8fafc,#eef2f8);
+    border: 1px solid #d0d9e8; border-radius: 12px; padding: 14px 18px 16px 18px;
+    font-size: 0.85rem; line-height: 1.6; color: #1e293b; min-height: 100px;
+  }
+  .explain-title {
+    font-size: 0.92rem; font-weight: 700; color: #0f172a; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .explain-title .badge {
+    background: #1e3a8a; color: #fff; font-size: 0.62rem; padding: 2px 10px;
+    border-radius: 30px; font-weight: 700;
+  }
+  .explain-body strong { color: #0f172a; }
+  .explain-body em { color: #1e3a8a; font-style: normal; font-weight: 600; }
+  .legend { display: flex; gap: 18px; margin-top: 8px; font-size: 0.75rem; color: #475569; flex-wrap: wrap; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+</style>
+</head>
+<body>
+<div class="exam-paper">
+  <canvas id="reactorCanvas" width="900" height="560"></canvas>
+
+  <div class="controls-row">
+    <div class="control-item">
+      <label for="rodSlider">Control Rods</label>
+      <input type="range" id="rodSlider" min="0" max="100" value="30" step="1">
+      <span class="value-badge" id="rodBadge">30%</span>
+    </div>
+    <div class="control-item">
+      <label for="coolantSlider">Coolant Flow</label>
+      <input type="range" id="coolantSlider" min="0" max="100" value="55" step="1">
+      <span class="value-badge" id="coolantBadge">55%</span>
+    </div>
+    <div class="control-item">
+      <button id="pauseBtn">⏸ Pause</button>
+      <button id="resetBtn" class="reset">↺ Reset</button>
+    </div>
+    <div class="temp-readout">
+      <span>CORE TEMP</span>
+      <span class="temp-value" id="tempValue">312</span>
+      <span>°C</span>
+    </div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-title">
+      <span class="badge">LIVE</span>
+      <span id="explainTitle">Watch the fission chain reaction</span>
+    </div>
+    <div class="explain-body" id="explainBody">
+      <strong>Uranium atoms</strong> (blue circles) sit inside the fuel rods.
+      A <em>fast neutron</em> is a small yellow dot moving quickly. When it passes through the
+      <strong>graphite moderator</strong> it slows down visibly — the dot grows larger and
+      starts to crawl. Those slow neutrons are the ones that split uranium atoms,
+      releasing new fast neutrons. The <strong>control rods</strong> absorb neutrons.
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:#3b82f6"></span> Uranium atom (U-235)</span>
+      <span><span class="dot" style="background:#facc15; width:6px; height:6px;"></span> Fast neutron (small, quick)</span>
+      <span><span class="dot" style="background:#facc15; width:11px; height:11px;"></span> Slow neutron (large, slow)</span>
+      <span><span class="dot" style="background:#22c55e"></span> Fission fragments</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('reactorCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 900, H = 560;
+
+  const rodSlider     = document.getElementById('rodSlider');
+  const rodBadge      = document.getElementById('rodBadge');
+  const coolantSlider = document.getElementById('coolantSlider');
+  const coolantBadge  = document.getElementById('coolantBadge');
+  const tempValueEl   = document.getElementById('tempValue');
+  const pauseBtn      = document.getElementById('pauseBtn');
+  const resetBtn      = document.getElementById('resetBtn');
+  const explainTitle  = document.getElementById('explainTitle');
+  const explainBody   = document.getElementById('explainBody');
+
+  let rodPercent = 30;
+  let coolantPercent = 55;
+  let coreTemp = 312;
+  let paused = false;
+  let time = 0;
+
+  let atoms = [];
+  let neutrons = [];
+  let coolantParticles = [];
+  let fuelGlow = [0,0,0,0];
+  let totalFissions = 0;
+  let fissionRate = 0;
+
+  // ---------- Geometry ----------
+  const CONCRETE = { x: 280, y: 60, w: 280, h: 440, thick: 28 };
+  const VESSEL   = { x: 325, y: 100, w: 190, h: 360, r: 28 };
+  const MODERATOR = { x: 342, y: 185, w: 156, h: 190 };
+
+  const FUEL_RODS = [
+    { x: 368, y: 175, w: 12, h: 210 },
+    { x: 400, y: 175, w: 12, h: 210 },
+    { x: 432, y: 175, w: 12, h: 210 },
+    { x: 464, y: 175, w: 12, h: 210 }
+  ];
+
+  const CONTROL_ROD_X = [355, 387, 419, 451, 483];
+  const CONTROL_ROD_TOP = 30;
+  const CONTROL_ROD_RAISED = 165;
+  const CONTROL_ROD_LOWERED = 385;
+
+  const COOLANT_OUT_Y = 150;
+  const COOLANT_IN_Y  = 420;
+  const PIPE_OUT_X_START = 515, PIPE_OUT_X_END = 620;
+  const PIPE_IN_X_START  = 620, PIPE_IN_X_END  = 515;
+
+  const CORE = {
+    xMin: MODERATOR.x + 3,
+    xMax: MODERATOR.x + MODERATOR.w - 3,
+    yMin: MODERATOR.y + 3,
+    yMax: MODERATOR.y + MODERATOR.h - 3
+  };
+
+  // ---- KEY FIX: fast brisk, slow visibly slower (5× ratio) ----
+  const FAST_SPEED = 4.5;
+  const SLOW_SPEED = 0.9;
+  const FRAGMENT_SPEED = 4.0;
+  const MAX_NEUTRONS = 14;
+  const NEUTRON_LIFE = 220;
+  const BACKGROUND_SPAWN_CHANCE = 0.007;
+  const FISSION_NEUTRON_COUNT = 2;
+  const MODERATOR_SLOW_CHANCE = 0.18;
+
+  function controlRodBottomY() {
+    return CONTROL_ROD_RAISED + (CONTROL_ROD_LOWERED - CONTROL_ROD_RAISED) * (rodPercent/100);
+  }
+
+  function buildAtoms() {
+    atoms = [];
+    for (let r = 0; r < FUEL_RODS.length; r++) {
+      const rod = FUEL_RODS[r];
+      const cx = rod.x + rod.w/2;
+      const count = 9;
+      for (let i = 0; i < count; i++) {
+        const cy = rod.y + 15 + (i * (rod.h - 30) / (count - 1));
+        atoms.push({
+          x: cx, y: cy, r: 5.5,
+          rodIndex: r,
+          alive: true,
+          splitTimer: 0,
+          fragA: null, fragB: null
+        });
+      }
+    }
+  }
+
+  function roundRect(x,y,w,h,r,fill,stroke,lw=2) {
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r);
+    ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h);
+    ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r);
+    ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+    if(fill){ctx.fillStyle=fill;ctx.fill();}
+    if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke();}
+  }
+
+  function spawnNeutron(x, y, fast, vx, vy) {
+    if (neutrons.length >= MAX_NEUTRONS) return;
+
+    let speed;
+    if (fast) speed = FAST_SPEED * (0.85 + Math.random()*0.3);
+    else      speed = SLOW_SPEED * (0.85 + Math.random()*0.3);
+
+    if (vx === undefined || vy === undefined) {
+      const angle = Math.random() * Math.PI * 2;
+      vx = Math.cos(angle) * speed;
+      vy = Math.sin(angle) * speed;
+    } else {
+      const mag = Math.hypot(vx, vy) || 1;
+      vx = (vx/mag) * speed;
+      vy = (vy/mag) * speed;
+    }
+
+    neutrons.push({ x, y, vx, vy, fast, life: NEUTRON_LIFE });
+  }
+
+  // ---------- Physics ----------
+  function updatePhysics() {
+    for (let i=0;i<4;i++) fuelGlow[i] = Math.max(0, fuelGlow[i] - 0.01);
+
+    if (Math.random() < BACKGROUND_SPAWN_CHANCE) {
+      const rod = FUEL_RODS[Math.floor(Math.random()*4)];
+      spawnNeutron(rod.x + rod.w/2, rod.y + rod.h/2, false);
+    }
+
+    const rodBottom = controlRodBottomY();
+
+    for (let i = neutrons.length-1; i>=0; i--) {
+      const n = neutrons[i];
+      n.x += n.vx;
+      n.y += n.vy;
+      n.life -= 1;
+
+      if (n.x < CORE.xMin) { n.x = CORE.xMin; n.vx = Math.abs(n.vx); }
+      if (n.x > CORE.xMax) { n.x = CORE.xMax; n.vx = -Math.abs(n.vx); }
+      if (n.y < CORE.yMin) { n.y = CORE.yMin; n.vy = Math.abs(n.vy); }
+      if (n.y > CORE.yMax) { n.y = CORE.yMax; n.vy = -Math.abs(n.vy); }
+
+      let absorbed = false;
+      for (let cx of CONTROL_ROD_X) {
+        if (n.x > cx-5 && n.x < cx+5 && n.y > CONTROL_ROD_TOP && n.y < rodBottom) {
+          absorbed = true; break;
+        }
+      }
+      if (absorbed) { neutrons.splice(i,1); continue; }
+
+      let fissionHappened = false;
+      for (let a = 0; a < atoms.length; a++) {
+        const atom = atoms[a];
+        if (!atom.alive) continue;
+        const dx = n.x - atom.x, dy = n.y - atom.y;
+        if (dx*dx + dy*dy < (atom.r + 4) * (atom.r + 4)) {
+          if (!n.fast) {
+            atom.alive = false;
+            atom.splitTimer = 30;
+            const baseAngle = Math.random() * Math.PI * 2;
+            atom.fragA = {
+              x: atom.x, y: atom.y,
+              vx: Math.cos(baseAngle) * FRAGMENT_SPEED,
+              vy: Math.sin(baseAngle) * FRAGMENT_SPEED,
+              life: 40, maxLife: 40
+            };
+            atom.fragB = {
+              x: atom.x, y: atom.y,
+              vx: Math.cos(baseAngle + Math.PI + (Math.random()-0.5)*0.8) * FRAGMENT_SPEED,
+              vy: Math.sin(baseAngle + Math.PI + (Math.random()-0.5)*0.8) * FRAGMENT_SPEED,
+              life: 40, maxLife: 40
+            };
+            fuelGlow[atom.rodIndex] = 1.0;
+            totalFissions++;
+            fissionRate = Math.min(1, fissionRate + 0.2);
+
+            for (let k=0;k<FISSION_NEUTRON_COUNT;k++) {
+              spawnNeutron(atom.x, atom.y, true);
+            }
+          }
+          fissionHappened = true;
+          break;
+        }
+      }
+      if (fissionHappened) { neutrons.splice(i,1); continue; }
+
+      if (n.fast && n.x > MODERATOR.x && n.x < MODERATOR.x+MODERATOR.w &&
+          n.y > MODERATOR.y && n.y < MODERATOR.y+MODERATOR.h) {
+        if (Math.random() < MODERATOR_SLOW_CHANCE) {
+          n.fast = false;
+          const mag = Math.hypot(n.vx, n.vy) || 1;
+          const target = SLOW_SPEED * (0.85 + Math.random()*0.3);
+          n.vx = (n.vx/mag) * target;
+          n.vy = (n.vy/mag) * target;
+        }
+      }
+
+      if (n.life <= 0 || n.x < 0 || n.x > W || n.y < 0 || n.y > H) {
+        neutrons.splice(i,1);
+      }
+    }
+
+    for (let a = 0; a < atoms.length; a++) {
+      const atom = atoms[a];
+      if (atom.splitTimer > 0) atom.splitTimer -= 1;
+      if (atom.fragA) {
+        atom.fragA.x += atom.fragA.vx; atom.fragA.y += atom.fragA.vy;
+        atom.fragA.life -= 1;
+        if (atom.fragA.life <= 0) atom.fragA = null;
+      }
+      if (atom.fragB) {
+        atom.fragB.x += atom.fragB.vx; atom.fragB.y += atom.fragB.vy;
+        atom.fragB.life -= 1;
+        if (atom.fragB.life <= 0) atom.fragB = null;
+      }
+      if (!atom.alive && atom.splitTimer <= 0 && !atom.fragA && !atom.fragB) {
+        if (Math.random() < 0.02) atom.alive = true;
+      }
+    }
+
+    fissionRate = Math.max(0, fissionRate - 0.008);
+
+    let totalGlow = fuelGlow.reduce((a,b)=>a+b, 0);
+    const targetTemp = 280 + totalGlow*180 + (rodPercent/100)*60 - (coolantPercent/100)*80;
+    coreTemp += (targetTemp - coreTemp) * 0.025;
+    coreTemp = Math.max(20, Math.min(1200, coreTemp));
+    tempValueEl.textContent = Math.round(coreTemp);
+
+    updateExplanation();
+  }
+
+  function updateExplanation() {
+    const aliveAtoms = atoms.filter(a=>a.alive).length;
+    const fastCount  = neutrons.filter(n=>n.fast).length;
+    const slowCount  = neutrons.filter(n=>!n.fast).length;
+
+    let title = 'Fission in action';
+    let body = '';
+
+    if (coreTemp > 750) {
+      title = '⚠️ Core is getting very hot';
+      body = 'The temperature is rising. To cool it down: <strong>insert the control rods</strong> (absorbs neutrons and slows fission) or <strong>increase coolant flow</strong> (removes heat faster).';
+    } else if (rodPercent > 80) {
+      title = '🛑 Control rods almost fully inserted';
+      body = 'The control rods absorb most neutrons before they can hit uranium atoms, so very few fissions occur. Pull the rods out a little to start the reaction again.';
+    } else if (rodPercent < 10 && slowCount > fastCount) {
+      title = '⚡ Chain reaction running fast';
+      body = 'With the control rods almost out, few neutrons are absorbed. Slow neutrons are splitting lots of uranium atoms. Push the rods in to slow it down.';
+    } else if (fastCount > 0 && fastCount >= slowCount) {
+      title = '🏃 Fast neutrons — the moderator is working';
+      body = 'Look at the <em>small, quick yellow dots</em>. When they enter the <strong>graphite moderator</strong> they visibly slow down and grow larger. The slow ones are what split uranium atoms.';
+    } else if (aliveAtoms < 10) {
+      title = '🔵 Fuel is being used up';
+      body = 'Most uranium atoms have been split. Each fission released energy and new neutrons — that is the chain reaction. One split causes more splits.';
+    } else {
+      title = '🔬 How fission works';
+      body = 'A <strong>slow neutron</strong> (large yellow dot) hits a <strong>uranium atom</strong> (blue). The atom <strong>splits into two fragments</strong> (green) and releases 2 <strong>fast neutrons</strong> (small, quick dots). The moderator slows them back down. The control rods absorb neutrons to keep the rate steady.';
+    }
+    explainTitle.textContent = title;
+    explainBody.innerHTML = body;
+  }
+
+  // ---------- Drawing ----------
+  function drawConcreteShielding() {
+    const x = CONCRETE.x, y = CONCRETE.y, w = CONCRETE.w, h = CONCRETE.h, t = CONCRETE.thick;
+    ctx.fillStyle = '#cbd5e1'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.rect(x,y,w,t); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(x,y+h-t,w,t); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(x,y+t,t,h-2*t); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.rect(x+w-t,y+t,t,h-2*t); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    for (let cx of CONTROL_ROD_X) ctx.fillRect(cx-4, y-1, 8, t+2);
+    ctx.fillRect(x+w-t-1, COOLANT_OUT_Y-16, t+2, 32);
+    ctx.fillRect(x+w-t-1, COOLANT_IN_Y-16, t+2, 32);
+  }
+
+  function drawReactorVessel() {
+    roundRect(VESSEL.x, VESSEL.y, VESSEL.w, VESSEL.h, VESSEL.r, '#f8fafc', '#000', 3);
+    roundRect(VESSEL.x+6, VESSEL.y+6, VESSEL.w-12, VESSEL.h-12, VESSEL.r-4, 'transparent', '#94a3b8', 1);
+  }
+
+  function drawCoolantPipes() {
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(PIPE_OUT_X_START, COOLANT_OUT_Y); ctx.lineTo(PIPE_OUT_X_END, COOLANT_OUT_Y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PIPE_OUT_X_END-12, COOLANT_OUT_Y-6); ctx.lineTo(PIPE_OUT_X_END, COOLANT_OUT_Y); ctx.lineTo(PIPE_OUT_X_END-12, COOLANT_OUT_Y+6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PIPE_IN_X_START, COOLANT_IN_Y); ctx.lineTo(PIPE_IN_X_END, COOLANT_IN_Y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(PIPE_IN_X_START+12, COOLANT_IN_Y-6); ctx.lineTo(PIPE_IN_X_START, COOLANT_IN_Y); ctx.lineTo(PIPE_IN_X_START+12, COOLANT_IN_Y+6); ctx.stroke();
+  }
+
+  function drawModerator() {
+    roundRect(MODERATOR.x, MODERATOR.y, MODERATOR.w, MODERATOR.h, 4, '#e2e8f0', '#000', 2);
+    ctx.fillStyle = 'rgba(100,116,139,0.3)';
+    for (let i = MODERATOR.x+8; i < MODERATOR.x+MODERATOR.w; i+=14)
+      for (let j = MODERATOR.y+8; j < MODERATOR.y+MODERATOR.h; j+=14)
+        { ctx.beginPath(); ctx.arc(i,j,1.2,0,Math.PI*2); ctx.fill(); }
+  }
+
+  function drawFuelRods() {
+    FUEL_RODS.forEach((rod, i) => {
+      roundRect(rod.x, rod.y, rod.w, rod.h, 3, '#2d3748', '#000', 1.5);
+      const glow = fuelGlow[i];
+      if (glow > 0.03) {
+        const g = ctx.createLinearGradient(rod.x, rod.y, rod.x+rod.w, rod.y);
+        g.addColorStop(0, `rgba(251,146,60,${0.7*glow})`);
+        g.addColorStop(0.5, `rgba(249,115,22,${0.9*glow})`);
+        g.addColorStop(1, `rgba(234,88,12,${0.7*glow})`);
+        roundRect(rod.x, rod.y, rod.w, rod.h, 3, g, null, 0);
+      }
+    });
+  }
+
+  function drawControlRods() {
+    const bottomY = controlRodBottomY();
+    CONTROL_ROD_X.forEach(cx => {
+      const h = bottomY - CONTROL_ROD_TOP;
+      if (h <= 0) return;
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.rect(cx-3, CONTROL_ROD_TOP, 6, h); ctx.fill(); ctx.stroke();
+    });
+  }
+
+  function drawCoolantFlow() {
+    const speed = 0.35 + (coolantPercent/100)*0.9;
+    coolantParticles.forEach(p => {
+      const t = (p.phase + time*speed) % 1;
+      let px, py, color;
+      if (t < 0.5) {
+        const u = t/0.5;
+        px = PIPE_IN_X_START + (PIPE_IN_X_END-PIPE_IN_X_START)*u;
+        py = COOLANT_IN_Y;
+        color = 'rgba(59,130,246,0.9)';
+      } else {
+        const u = (t-0.5)/0.5;
+        px = PIPE_OUT_X_START + (PIPE_OUT_X_END-PIPE_OUT_X_START)*u;
+        py = COOLANT_OUT_Y;
+        color = 'rgba(239,68,68,0.9)';
+      }
+      ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill();
+    });
+    const innerSpeed = 0.12 + (coolantPercent/100)*0.3;
+    for (let i=0;i<8;i++) {
+      const t = (i/8 + time*innerSpeed) % 1;
+      const angle = t*Math.PI*2;
+      const rx = VESSEL.x + VESSEL.w/2 + Math.cos(angle)*(VESSEL.w/2-18);
+      const ry = VESSEL.y + VESSEL.h/2 + Math.sin(angle)*(VESSEL.h/2-18);
+      ctx.beginPath(); ctx.arc(rx, ry, 2.5, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(147,197,253,${0.5 + 0.3*Math.sin(time+i)})`; ctx.fill();
+    }
+  }
+
+  function drawAtoms() {
+    atoms.forEach(atom => {
+      if (atom.alive) {
+        const g = ctx.createRadialGradient(atom.x-2, atom.y-2, 1, atom.x, atom.y, atom.r);
+        g.addColorStop(0, '#93c5fd');
+        g.addColorStop(1, '#2563eb');
+        ctx.beginPath();
+        ctx.arc(atom.x, atom.y, atom.r, 0, Math.PI*2);
+        ctx.fillStyle = g; ctx.fill();
+        ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 6px Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('U', atom.x, atom.y);
+      } else if (atom.splitTimer > 0) {
+        const a = atom.splitTimer / 30;
+        ctx.beginPath();
+        ctx.arc(atom.x, atom.y, atom.r + (1-a)*8, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(250,204,21,${a*0.6})`;
+        ctx.lineWidth = 2; ctx.stroke();
+      }
+      if (atom.fragA) {
+        const f = atom.fragA, alpha = f.life / f.maxLife;
+        ctx.beginPath(); ctx.arc(f.x, f.y, 3.5, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(34,197,94,${alpha})`; ctx.fill();
+        ctx.strokeStyle = `rgba(21,128,61,${alpha})`; ctx.lineWidth = 1; ctx.stroke();
+      }
+      if (atom.fragB) {
+        const f = atom.fragB, alpha = f.life / f.maxLife;
+        ctx.beginPath(); ctx.arc(f.x, f.y, 3.5, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(34,197,94,${alpha})`; ctx.fill();
+        ctx.strokeStyle = `rgba(21,128,61,${alpha})`; ctx.lineWidth = 1; ctx.stroke();
+      }
+    });
+  }
+
+  function drawNeutrons() {
+    neutrons.forEach(n => {
+      const alpha = Math.min(1, n.life/30);
+      const radius = n.fast ? 2.6 : 5.0;
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, radius + 4, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(250,204,21,${alpha * (n.fast ? 0.12 : 0.22)})`;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, radius, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(250,204,21,${alpha})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(180,140,10,${alpha})`;
+      ctx.lineWidth = n.fast ? 0.7 : 1.1;
+      ctx.stroke();
+    });
+  }
+
+  function drawLabels() {
+    ctx.font = '15px Arial'; ctx.fillStyle = '#000'; ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1; ctx.textBaseline = 'middle';
+
+    ctx.textAlign = 'right';
+    ctx.fillText('control rod', 230, 145);
+    ctx.beginPath(); ctx.moveTo(238,145); ctx.lineTo(355,145); ctx.stroke();
+
+    ctx.textAlign = 'right';
+    ctx.fillText('moderator', 230, 260);
+    ctx.beginPath(); ctx.moveTo(238,260); ctx.lineTo(342,260); ctx.stroke();
+
+    ctx.textAlign = 'right';
+    ctx.fillText('fuel rod', 230, 345);
+    ctx.beginPath(); ctx.moveTo(238,345); ctx.lineTo(368,345); ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillText('shielding', 645, 85);
+    ctx.beginPath(); ctx.moveTo(637,85); ctx.lineTo(546,85); ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillText('coolant out', 645, 150);
+
+    ctx.textAlign = 'left';
+    ctx.fillText('reactor vessel', 645, 275);
+    ctx.beginPath(); ctx.moveTo(637,275); ctx.lineTo(515,275); ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillText('coolant in', 645, 420);
+  }
+
+  let lastTime = 0;
+  const FIXED_DT = 16;
+  let accumulator = 0;
+
+  function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min(100, timestamp - lastTime);
+    lastTime = timestamp;
+
+    if (!paused) {
+      accumulator += dt;
+      while (accumulator >= FIXED_DT) {
+        updatePhysics();
+        accumulator -= FIXED_DT;
+      }
+      time += 0.02;
+    }
+
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H);
+    drawConcreteShielding();
+    drawReactorVessel();
+    drawCoolantPipes();
+    drawModerator();
+    drawFuelRods();
+    drawControlRods();
+    drawCoolantFlow();
+    drawAtoms();
+    drawNeutrons();
+    drawLabels();
+
+    requestAnimationFrame(loop);
+  }
+
+  function resetAll() {
+    neutrons = [];
+    fuelGlow = [0,0,0,0];
+    coreTemp = 312;
+    totalFissions = 0;
+    fissionRate = 0;
+    rodSlider.value = 30; rodPercent = 30; rodBadge.textContent = '30%';
+    coolantSlider.value = 55; coolantPercent = 55; coolantBadge.textContent = '55%';
+    tempValueEl.textContent = '312';
+    buildAtoms();
+    for (let i=0;i<3;i++) {
+      const rod = FUEL_RODS[i % 4];
+      spawnNeutron(rod.x + rod.w/2, rod.y + rod.h/2, false);
+    }
+  }
+
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  });
+  resetBtn.addEventListener('click', resetAll);
+  rodSlider.addEventListener('input', e => {
+    rodPercent = parseInt(e.target.value);
+    rodBadge.textContent = rodPercent + '%';
+  });
+  coolantSlider.addEventListener('input', e => {
+    coolantPercent = parseInt(e.target.value);
+    coolantBadge.textContent = coolantPercent + '%';
+  });
+
+  buildAtoms();
+  for (let i=0;i<12;i++) coolantParticles.push({ phase: Math.random() });
+  for (let i=0;i<3;i++) {
+    const rod = FUEL_RODS[i % 4];
+    spawnNeutron(rod.x + rod.w/2, rod.y + rod.h/2, false);
+  }
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
