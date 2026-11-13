@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edexcel IGCSE · Nuclear Fusion — Interactive</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #e8ecf2; display: flex; justify-content: center; align-items: flex-start;
+    min-height: 100vh; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; padding: 18px;
+  }
+  .exam-paper {
+    background: #fff; border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.15);
+    padding: 18px 22px 20px 22px; max-width: 960px; width: fit-content;
+  }
+  canvas { display: block; border-radius: 6px; background: #fff; border: 1px solid #d0d7e2; margin: 0 auto; }
+  .controls-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px;
+    margin-top: 14px; padding: 10px 4px 2px 4px; border-top: 1px solid #e2e8f0;
+    font-size: 0.85rem; color: #1e293b;
+  }
+  .control-item { display: flex; align-items: center; gap: 10px; white-space: nowrap; flex: 1; min-width: 340px; }
+  .control-item label {
+    font-weight: 700; font-size: 0.8rem; color: #334155;
+    min-width: 130px; letter-spacing: 0.1px;
+  }
+  input[type="range"] { flex: 1; min-width: 140px; accent-color: #1e3a8a; cursor: pointer; }
+  button {
+    background: #1e3a8a; color: #fff; border: none; font-weight: 600;
+    font-size: 0.76rem; padding: 7px 16px; border-radius: 30px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  button:hover { background: #152c6e; }
+  button.reset { background: #64748b; }
+  button.reset:hover { background: #475569; }
+  button.explain { background: #0f766e; }
+  button.explain:hover { background: #0b5e56; }
+
+  .readout-bar {
+    display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: center;
+    margin-top: 10px; padding: 10px 16px; border-radius: 10px;
+    background: #f1f5f9; border: 1px solid #dde3ed;
+    font-size: 0.82rem; font-weight: 600; color: #0f172a;
+  }
+  .readout-bar .status { color: #b91c1c; }
+  .readout-bar .status.good { color: #15803d; }
+  .readout-bar .field { display: flex; gap: 6px; align-items: center; }
+  .readout-bar .field span:first-child { color: #64748b; font-weight: 500; }
+  .readout-bar .value { font-variant-numeric: tabular-nums; }
+
+  .explain-panel {
+    margin-top: 14px; background: linear-gradient(135deg,#f8fafc,#eef2f8);
+    border: 1px solid #d0d9e8; border-radius: 12px;
+    padding: 14px 18px 16px 18px; font-size: 0.86rem; line-height: 1.6;
+    color: #1e293b; min-height: 96px; transition: background 0.3s;
+  }
+  .explain-title {
+    font-size: 0.92rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
+  }
+  .explain-title .badge {
+    background: #1e3a8a; color: #fff; font-size: 0.62rem; padding: 2px 10px;
+    border-radius: 30px; font-weight: 700;
+  }
+  .explain-body strong { color: #0f172a; }
+  .explain-body em { color: #1e3a8a; font-style: normal; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="exam-paper">
+  <canvas id="fusionCanvas" width="900" height="520"></canvas>
+
+  <div class="controls-row">
+    <div class="control-item">
+      <label for="tpSlider">🌡 Temperature / Pressure</label>
+      <input type="range" id="tpSlider" min="0" max="100" value="10" step="1">
+    </div>
+    <div class="control-item" style="flex:0; gap:8px; min-width:auto;">
+      <button id="whyRepelBtn" class="explain">Why do they bounce?</button>
+      <button id="whyEnergyBtn" class="explain">Why is energy released?</button>
+      <button id="resetBtn" class="reset">↺ Reset</button>
+    </div>
+  </div>
+
+  <div class="readout-bar" id="readoutBar">
+    <div class="field"><span>Temperature:</span><span class="value" id="tempVal">5,000 K</span></div>
+    <div class="field"><span>Pressure:</span><span class="value" id="presVal">1 atm</span></div>
+    <div class="field"><span>Status:</span><span class="status" id="statusVal">Repulsion wins — no fusion</span></div>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-title">
+      <span class="badge">GUIDE</span>
+      <span id="explainTitle">Two hydrogen nuclei approaching</span>
+    </div>
+    <div class="explain-body" id="explainBody">
+      Both nuclei are <strong>positively charged</strong> (red + signs), so they
+      <strong>repel</strong> each other. At low temperature they don't have enough
+      energy to get close enough to fuse — they bounce apart before reaching the fusion zone.
+      <em>Drag the slider to the right</em> to raise the temperature and pressure.
+      When it's high enough, the nuclei overcome the repulsion and <strong>fuse into helium</strong>.
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('fusionCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 900, H = 520;
+
+  const tpSlider     = document.getElementById('tpSlider');
+  const tempVal      = document.getElementById('tempVal');
+  const presVal      = document.getElementById('presVal');
+  const statusVal    = document.getElementById('statusVal');
+  const explainTitle = document.getElementById('explainTitle');
+  const explainBody  = document.getElementById('explainBody');
+  const whyRepelBtn  = document.getElementById('whyRepelBtn');
+  const whyEnergyBtn = document.getElementById('whyEnergyBtn');
+  const resetBtn     = document.getElementById('resetBtn');
+
+  let tp = 10;
+  let time = 0;
+  let nuclei = [];
+  let fused = false;
+  let fusionFlash = 0;
+  let gammaRays = [];
+  let explanationOverride = null;
+  let fusedDisplayTimer = 0;
+  let failureMessageTimer = 0;
+
+  const CENTER = { x: W/2, y: 250 };
+  const FUSION_THRESHOLD = 65;
+  const START_DIST = 280;
+  const FUSION_DIST = 30;
+
+  const APPROACH_MIN = 0.18;
+  const APPROACH_MAX = 3.2;
+
+  // ---- ONLY CHANGE: barrier width halved (220 → 110) ----
+  function barrierRadius() {
+    if (tp >= FUSION_THRESHOLD) return FUSION_DIST;
+    const t = tp / FUSION_THRESHOLD;
+    return 110 - t * (110 - FUSION_DIST);
+  }
+
+  function initNuclei() {
+    nuclei = [
+      { x: CENTER.x - START_DIST, y: CENTER.y, r: 22, phase: 'approach' },
+      { x: CENTER.x + START_DIST, y: CENTER.y, r: 22, phase: 'approach' }
+    ];
+    fused = false;
+    fusionFlash = 0;
+    gammaRays = [];
+    fusedDisplayTimer = 0;
+    failureMessageTimer = 0;
+  }
+
+  function updatePhysics() {
+    if (explanationOverride !== null) return;
+
+    const t = tp / 100;
+    const displayTemp = 5000 + t * (15000000 - 5000);
+    const displayPres = 1 + t * 2.5e11;
+    tempVal.textContent = formatNumber(displayTemp) + ' K';
+    presVal.textContent = formatPressure(displayPres);
+    statusVal.classList.remove('good');
+
+    if (!fused) {
+      const speed = APPROACH_MIN + t * (APPROACH_MAX - APPROACH_MIN);
+      const barrier = barrierRadius();
+
+      let justBounced = false;
+
+      for (let i = 0; i < 2; i++) {
+        const n = nuclei[i];
+        const dir = (i === 0) ? 1 : -1;
+
+        if (n.phase === 'approach') {
+          n.x += dir * speed;
+          const distToCentre = Math.abs(n.x - CENTER.x);
+
+          if (distToCentre <= barrier) {
+            n.x = CENTER.x + (i === 0 ? -barrier : barrier);
+
+            if (tp >= FUSION_THRESHOLD) {
+              fused = true;
+              fusionFlash = 45;
+              fusedDisplayTimer = 0;
+              gammaRays = [];
+              for (let g = 0; g < 6; g++) {
+                gammaRays.push({
+                  angle: (Math.PI * 2 / 6) * g + Math.random() * 0.3,
+                  life: 60, maxLife: 60
+                });
+              }
+              statusVal.textContent = '✓ FUSION — mass lost → energy released';
+              statusVal.classList.add('good');
+              break;
+            } else {
+              n.phase = 'retreat';
+              justBounced = true;
+            }
+          }
+        } else if (n.phase === 'retreat') {
+          n.x -= dir * speed;
+          const distToCentre = Math.abs(n.x - CENTER.x);
+          if (distToCentre >= START_DIST) {
+            n.x = CENTER.x + (i === 0 ? -START_DIST : START_DIST);
+            n.phase = 'approach';
+          }
+        }
+      }
+
+      if (justBounced) {
+        failureMessageTimer = 180;
+      }
+
+      if (!fused) {
+        const anyRetreating = nuclei.some(n => n.phase === 'retreat');
+        if (anyRetreating) {
+          statusVal.textContent = 'Repelled — nuclei retreating';
+        } else if (tp >= FUSION_THRESHOLD) {
+          statusVal.textContent = 'Approaching — enough energy to fuse?';
+        } else {
+          statusVal.textContent = 'Repulsion wins — no fusion';
+        }
+      }
+    } else {
+      fusedDisplayTimer++;
+    }
+
+    for (let i = gammaRays.length - 1; i >= 0; i--) {
+      gammaRays[i].life -= 1;
+      if (gammaRays[i].life <= 0) gammaRays.splice(i, 1);
+    }
+
+    if (fusionFlash > 0) fusionFlash -= 1;
+    if (failureMessageTimer > 0) failureMessageTimer -= 1;
+    time += 0.02;
+    updateExplanation();
+  }
+
+  function formatNumber(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + ' million';
+    if (n >= 1000) return Math.round(n).toLocaleString();
+    return Math.round(n).toString();
+  }
+
+  function formatPressure(p) {
+    if (p >= 1e9) return (p / 1e9).toFixed(1) + ' × 10⁹ atm';
+    if (p >= 1e6) return (p / 1e6).toFixed(1) + ' × 10⁶ atm';
+    if (p >= 1000) return (p / 1000).toFixed(1) + ' × 10³ atm';
+    return Math.round(p) + ' atm';
+  }
+
+  function updateExplanation() {
+    if (explanationOverride === 'repel') {
+      explainTitle.textContent = 'Why do the nuclei bounce apart?';
+      explainBody.innerHTML =
+        'Both nuclei are <strong>positively charged</strong> (they contain protons). ' +
+        'Like charges <strong>repel</strong> each other — this is called <em>electrostatic repulsion</em>. ' +
+        'At low temperature and pressure, the nuclei are moving slowly, so they don\'t have enough ' +
+        '<strong>kinetic energy</strong> to get close enough to overcome this repulsion and fuse. ' +
+        'They simply bounce away from each other.';
+      return;
+    }
+    if (explanationOverride === 'energy') {
+      explainTitle.textContent = 'Why is energy released during fusion?';
+      explainBody.innerHTML =
+        'When the two hydrogen nuclei fuse, they form a <strong>helium nucleus</strong>. ' +
+        'The helium nucleus has <strong>slightly less mass</strong> than the two protons combined. ' +
+        'This <strong>lost mass</strong> is released as <strong>energy</strong> — carried away as ' +
+        'gamma radiation and kinetic energy of the products. This is the same principle that powers ' +
+        'the Sun: mass loss → huge energy release.';
+      return;
+    }
+
+    if (fused) {
+      explainTitle.textContent = '✓ Fusion has occurred — helium formed';
+      explainBody.innerHTML =
+        'The two hydrogen nuclei have joined to form a <strong>helium nucleus</strong>. ' +
+        'Because the helium has less mass than the two protons together, the missing mass was ' +
+        'released as <strong>energy</strong> (shown as the yellow gamma-ray burst). ' +
+        'This is the energy source of stars. Drag the slider back to the left to see repulsion again.';
+    } else {
+      const anyRetreating = nuclei.some(n => n.phase === 'retreat');
+      if (anyRetreating) {
+        explainTitle.textContent = 'Repelled! The nuclei could not fuse';
+        explainBody.innerHTML =
+          'The two positively charged nuclei were pushed back by their <strong>repulsion</strong> ' +
+          'before they could get close enough to fuse. At this temperature and pressure they do not have ' +
+          '<strong>enough kinetic energy</strong> to overcome the electrostatic barrier. ' +
+          'Raise the temperature and pressure to reduce the repulsion barrier so they can fuse.';
+      } else if (tp >= FUSION_THRESHOLD) {
+        explainTitle.textContent = 'High enough T/P — fusion imminent';
+        explainBody.innerHTML =
+          'At this temperature and pressure, the nuclei have <strong>enough kinetic energy</strong> ' +
+          'to overcome the electrostatic repulsion. The repulsion barrier (dashed line) has shrunk. ' +
+          'The nuclei will fuse into helium, releasing energy. Watch the flash.';
+      } else if (tp > 30) {
+        explainTitle.textContent = 'Getting closer — but not enough';
+        explainBody.innerHTML =
+          'The nuclei are moving faster now, but their kinetic energy is still <strong>not enough</strong> ' +
+          'to overcome the repulsion barrier. They still bounce apart. ' +
+          '<em>Keep pushing the slider right</em> — you need very high temperature and pressure to fuse.';
+      } else {
+        explainTitle.textContent = 'Two hydrogen nuclei approaching';
+        explainBody.innerHTML =
+          'Both nuclei are <strong>positively charged</strong> (red + signs), so they ' +
+          '<strong>repel</strong> each other. At low temperature they don\'t have enough energy ' +
+          'to get close enough to fuse — they bounce apart. <em>Drag the slider to the right</em> ' +
+          'to raise the temperature and pressure.';
+      }
+    }
+  }
+
+  function drawBackground() {
+    if (tp >= FUSION_THRESHOLD) {
+      const alpha = Math.min(0.35, (tp - FUSION_THRESHOLD) / 35 * 0.35);
+      for (let i = 0; i < 40; i++) {
+        const sx = (i * 137) % W;
+        const sy = (i * 213) % H;
+        ctx.fillStyle = `rgba(255, 240, 200, ${alpha * (0.4 + 0.6*Math.sin(i + time))})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1 + (i % 2), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawCoulombBarrier() {
+    const barrier = barrierRadius();
+    ctx.save();
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = fused ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(CENTER.x - barrier, CENTER.y - 150);
+    ctx.lineTo(CENTER.x - barrier, CENTER.y + 150);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(CENTER.x + barrier, CENTER.y - 150);
+    ctx.lineTo(CENTER.x + barrier, CENTER.y + 150);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.font = 'bold 12px Arial';
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('repulsion barrier', CENTER.x, CENTER.y - 170);
+
+    if (!fused) {
+      ctx.fillStyle = 'rgba(239,68,68,0.05)';
+      ctx.fillRect(CENTER.x - barrier, CENTER.y - 150, barrier * 2, 300);
+    }
+  }
+
+  function drawNuclei() {
+    if (fused) {
+      drawHelium();
+      return;
+    }
+    for (const n of nuclei) {
+      const other = n === nuclei[0] ? nuclei[1] : nuclei[0];
+      const sep = Math.abs(n.x - other.x);
+      if (sep < 150 && tp < FUSION_THRESHOLD) {
+        const dir = (n.x < CENTER.x) ? -1 : 1;
+        const arcX = n.x + dir * (n.r + 14);
+        const arcY = n.y;
+        ctx.strokeStyle = 'rgba(239,68,68,0.6)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + 14, dir > 0 ? -Math.PI/3 : Math.PI*2/3, dir > 0 ? Math.PI/3 : Math.PI*4/3, dir < 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(arcX, arcY - 6);
+        ctx.lineTo(arcX + dir * 8, arcY);
+        ctx.lineTo(arcX, arcY + 6);
+        ctx.fillStyle = 'rgba(239,68,68,0.6)';
+        ctx.fill();
+      }
+
+      const g = ctx.createRadialGradient(n.x - 6, n.y - 6, 3, n.x, n.y, n.r);
+      g.addColorStop(0, '#fca5a5');
+      g.addColorStop(0.7, '#ef4444');
+      g.addColorStop(1, '#b91c1c');
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.strokeStyle = '#7f1d1d';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 24px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('+', n.x, n.y + 1);
+
+      ctx.font = 'bold 12px Arial';
+      ctx.fillStyle = '#334155';
+      ctx.textBaseline = 'top';
+      ctx.fillText('hydrogen nucleus', n.x, n.y + n.r + 8);
+      ctx.font = '11px Arial';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('(proton)', n.x, n.y + n.r + 24);
+    }
+  }
+
+  function drawHelium() {
+    const cx = CENTER.x, cy = CENTER.y;
+    const r = 34;
+
+    const glow = 0.6 + 0.3 * Math.sin(time * 3);
+    const glowGrad = ctx.createRadialGradient(cx, cy, r * 0.5, cx, cy, r * 2.2);
+    glowGrad.addColorStop(0, `rgba(59,130,246,${glow * 0.4})`);
+    glowGrad.addColorStop(1, 'rgba(59,130,246,0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    const g = ctx.createRadialGradient(cx - 10, cy - 10, 4, cx, cy, r);
+    g.addColorStop(0, '#93c5fd');
+    g.addColorStop(0.7, '#2563eb');
+    g.addColorStop(1, '#1e3a8a');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath(); ctx.arc(cx - 10, cy - 8, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 10, cy - 8, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx - 8,  cy + 12, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 8,  cy + 12, 8, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('He', cx, cy + 1);
+
+    ctx.font = 'bold 13px Arial';
+    ctx.fillStyle = '#15803d';
+    ctx.textBaseline = 'top';
+    ctx.fillText('helium nucleus', cx, cy + r + 10);
+    ctx.font = '11px Arial';
+    ctx.fillStyle = '#64748b';
+    ctx.fillText('(fusion product)', cx, cy + r + 26);
+
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#7f1d1d';
+    ctx.fillText('mass lost = 0.7%  →  energy released', cx, cy + r + 46);
+
+    for (const ray of gammaRays) {
+      const alpha = ray.life / ray.maxLife;
+      const inner = r + 10;
+      const outer = r + 90;
+      const x1 = cx + Math.cos(ray.angle) * inner;
+      const y1 = cy + Math.sin(ray.angle) * inner;
+      const x2 = cx + Math.cos(ray.angle) * outer;
+      const y2 = cy + Math.sin(ray.angle) * outer;
+
+      ctx.strokeStyle = `rgba(234,179,8,${alpha})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      const segs = 4;
+      for (let s = 1; s <= segs; s++) {
+        const t = s / segs;
+        const px = x1 + (x2 - x1) * t;
+        const py = y1 + (y2 - y1) * t;
+        const perpX = Math.cos(ray.angle + Math.PI/2) * 6 * (s % 2 === 0 ? 1 : -1);
+        const perpY = Math.sin(ray.angle + Math.PI/2) * 6 * (s % 2 === 0 ? 1 : -1);
+        ctx.lineTo(px + perpX, py + perpY);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawFusionFlash() {
+    if (fusionFlash > 0) {
+      const a = fusionFlash / 45;
+      const radius = 50 + (1 - a) * 80;
+      ctx.beginPath();
+      ctx.arc(CENTER.x, CENTER.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = fused
+        ? `rgba(250,204,21,${a})`
+        : `rgba(239,68,68,${a * 0.6})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(CENTER.x, CENTER.y, radius * 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = fused
+        ? `rgba(253,224,71,${a * 0.25})`
+        : `rgba(239,68,68,${a * 0.15})`;
+      ctx.fill();
+    }
+  }
+
+  function drawFailureMessage() {
+    if (failureMessageTimer <= 0 || fused) return;
+    const alpha = Math.min(1, failureMessageTimer / 60);
+    const msgY = CENTER.y + 160;
+
+    ctx.fillStyle = `rgba(254, 226, 226, ${alpha * 0.9})`;
+    ctx.strokeStyle = `rgba(185, 28, 28, ${alpha})`;
+    ctx.lineWidth = 2;
+    roundRectPath(CENTER.x - 300, msgY - 34, 600, 68, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(153, 27, 27, ${alpha})`;
+    ctx.font = 'bold 15px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('FUSION FAILED', CENTER.x, msgY - 14);
+
+    ctx.font = '13px Arial';
+    ctx.fillStyle = `rgba(127, 29, 29, ${alpha})`;
+    ctx.fillText('Repulsion too strong — temperature and pressure too low', CENTER.x, msgY + 6);
+    ctx.fillText('to overcome the repulsive force.', CENTER.x, msgY + 24);
+  }
+
+  function roundRectPath(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function drawStarIcon() {
+    const sx = W - 70, sy = 55, r = 26;
+    const glow = fused ? (0.7 + 0.3 * Math.sin(time * 4)) : 0.25;
+
+    const glowGrad = ctx.createRadialGradient(sx, sy, r*0.5, sx, sy, r*2.4);
+    glowGrad.addColorStop(0, `rgba(251,191,36,${glow * 0.6})`);
+    glowGrad.addColorStop(1, 'rgba(251,191,36,0)');
+    ctx.beginPath();
+    ctx.arc(sx, sy, r * 2.4, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    const g = ctx.createRadialGradient(sx - 5, sy - 5, 4, sx, sy, r);
+    g.addColorStop(0, '#fef08a');
+    g.addColorStop(0.6, '#f59e0b');
+    g.addColorStop(1, '#b45309');
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (fused) {
+      ctx.strokeStyle = `rgba(251,191,36,${0.6 + 0.3*Math.sin(time*4)})`;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 / 8) * i + time * 0.3;
+        const x1 = sx + Math.cos(angle) * (r + 6);
+        const y1 = sy + Math.sin(angle) * (r + 6);
+        const x2 = sx + Math.cos(angle) * (r + 16);
+        const y2 = sy + Math.sin(angle) * (r + 16);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = '#78350f';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('the Sun', sx, sy + r + 8);
+  }
+
+  function drawAxisLabel() {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('low T / P  (cool, low pressure)', 100, H - 30);
+    ctx.fillText('high T / P  (star core)', W - 100, H - 30);
+  }
+
+  let lastTime = 0;
+  const FIXED_DT = 16;
+  let accumulator = 0;
+
+  function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min(100, timestamp - lastTime);
+    lastTime = timestamp;
+
+    accumulator += dt;
+    while (accumulator >= FIXED_DT) {
+      updatePhysics();
+      accumulator -= FIXED_DT;
+    }
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    drawBackground();
+    drawCoulombBarrier();
+    drawNuclei();
+    drawFusionFlash();
+    drawFailureMessage();
+    drawStarIcon();
+    drawAxisLabel();
+
+    requestAnimationFrame(loop);
+  }
+
+  tpSlider.addEventListener('input', e => {
+    const newTp = parseInt(e.target.value);
+    if (fused && newTp < FUSION_THRESHOLD) {
+      initNuclei();
+    }
+    tp = newTp;
+    explanationOverride = null;
+  });
+
+  resetBtn.addEventListener('click', () => {
+    tpSlider.value = 10;
+    tp = 10;
+    explanationOverride = null;
+    initNuclei();
+  });
+
+  whyRepelBtn.addEventListener('click', () => {
+    explanationOverride = (explanationOverride === 'repel') ? null : 'repel';
+    updateExplanation();
+  });
+
+  whyEnergyBtn.addEventListener('click', () => {
+    explanationOverride = (explanationOverride === 'energy') ? null : 'energy';
+    updateExplanation();
+  });
+
+  initNuclei();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
