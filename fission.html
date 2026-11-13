@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edexcel IGCSE · Nuclear Fission — Interactive</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #e8ecf2; display: flex; justify-content: center; align-items: flex-start;
+    min-height: 100vh; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; padding: 18px;
+  }
+  .exam-paper {
+    background: #fff; border-radius: 12px; box-shadow: 0 12px 36px rgba(0,0,0,0.15);
+    padding: 18px 22px 20px 22px; max-width: 960px; width: fit-content;
+  }
+  canvas { display: block; border-radius: 6px; background: #fff; border: 1px solid #d0d7e2; margin: 0 auto; }
+  .controls-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    margin-top: 14px; padding: 10px 4px 2px 4px; border-top: 1px solid #e2e8f0;
+  }
+  button {
+    background: #1e3a8a; color: #fff; border: none; font-weight: 600;
+    font-size: 0.78rem; padding: 8px 16px; border-radius: 30px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  button:hover { background: #152c6e; }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  button.reset { background: #64748b; }
+  button.reset:hover:not(:disabled) { background: #475569; }
+  button.secondary { background: #0f766e; }
+  button.secondary:hover:not(:disabled) { background: #0b5e56; }
+  button.toggle { background: #7c3aed; }
+  button.toggle:hover { background: #6d28d9; }
+  button.toggle.on { background: #be185d; }
+  button.toggle.on:hover { background: #9d174d; }
+
+  .equation-bar {
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 12px; padding: 10px 16px;
+    background: #f1f5f9; border: 1px solid #dde3ed; border-radius: 10px;
+    font-family: 'Cambria Math', 'Times New Roman', serif;
+    font-size: 1.15rem; color: #0f172a;
+    transition: opacity 0.3s, max-height 0.3s, padding 0.3s;
+    opacity: 0; max-height: 0; padding: 0 16px; overflow: hidden;
+  }
+  .equation-bar.visible {
+    opacity: 1; max-height: 60px; padding: 10px 16px;
+  }
+  .equation-bar sup { font-size: 0.65em; }
+  .equation-bar sub { font-size: 0.65em; }
+
+  .explain-panel {
+    margin-top: 14px; background: linear-gradient(135deg,#f8fafc,#eef2f8);
+    border: 1px solid #d0d9e8; border-radius: 12px;
+    padding: 14px 18px 16px 18px; font-size: 0.86rem; line-height: 1.6;
+    color: #1e293b; min-height: 130px; transition: background 0.3s;
+  }
+  .explain-title {
+    font-size: 0.92rem; font-weight: 700; color: #0f172a;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .explain-title .badge {
+    background: #1e3a8a; color: #fff; font-size: 0.62rem; padding: 2px 10px;
+    border-radius: 30px; font-weight: 700;
+  }
+  .explain-body strong { color: #0f172a; }
+  .explain-body em { color: #1e3a8a; font-style: normal; font-weight: 600; }
+  .explain-body ol { padding-left: 22px; margin-top: 6px; }
+  .explain-body li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="exam-paper">
+  <canvas id="fissionCanvas" width="900" height="540"></canvas>
+
+  <div class="equation-bar" id="equationBar">
+    <span id="equationText"></span>
+  </div>
+
+  <div class="controls-row">
+    <button id="fireBtn">▶ Fire neutron</button>
+    <button id="secondBtn" class="secondary" disabled>⚡ Try a second fission</button>
+    <button id="resetBtn" class="reset">↺ Reset</button>
+    <button id="pauseBtn">⏸ Pause</button>
+    <button id="equationBtn" class="toggle">Show equation</button>
+  </div>
+
+  <div class="explain-panel">
+    <div class="explain-title">
+      <span class="badge">GUIDE</span>
+      <span id="explainTitle">Watch what happens when a neutron hits U-235</span>
+    </div>
+    <div class="explain-body" id="explainBody">
+      A <strong>U-235 nucleus</strong> is shown in the centre, made up of many protons
+      (red +) and neutrons (grey 0). Press <em>Fire neutron</em> to launch a slow neutron
+      at it. When the neutron hits the nucleus, the U-235 <strong>splits into two smaller
+      daughter nuclei</strong>, releasing <strong>2–3 fast neutrons</strong> and a large
+      amount of <strong>energy</strong>.
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('fissionCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 900, H = 540;
+
+  const fireBtn     = document.getElementById('fireBtn');
+  const secondBtn   = document.getElementById('secondBtn');
+  const resetBtn    = document.getElementById('resetBtn');
+  const pauseBtn    = document.getElementById('pauseBtn');
+  const equationBtn = document.getElementById('equationBtn');
+  const equationBar = document.getElementById('equationBar');
+  const equationText = document.getElementById('equationText');
+  const explainTitle = document.getElementById('explainTitle');
+  const explainBody  = document.getElementById('explainBody');
+
+  // ---------- State ----------
+  let state = 'idle';    // 'idle' | 'incoming' | 'splitting' | 'done'
+  let time = 0;
+  let paused = false;
+
+  // Incoming neutron
+  let incomingNeutron = null;   // { x, y, vx }
+  // U-235 nucleus centre
+  const NUCLEUS = { x: W/2, y: 235, r: 55 };
+  // Fragment state
+  let fragments = [];           // { x, y, vx, vy, r, color, label, mass }
+  let releasedNeutrons = [];    // { x, y, vx, vy, life }
+  let energyFlash = 0;          // countdown
+  let energyRings = [];         // { x, y, r, life, maxLife }
+  let splitProgress = 0;        // 0..1 as U-235 stretches and breaks
+  let currentReaction = null;   // 'primary' | 'secondary'
+
+  // Which fission reaction are we running?
+  const REACTIONS = {
+    primary: {
+      fragments: [
+        { label: '¹⁴¹Ba', mass: 141, r: 34, color: '#2563eb' },
+        { label: '⁹²Kr',  mass: 92,  r: 28, color: '#16a34a' }
+      ],
+      neutrons: 3,
+      equationHTML: '<sup>235</sup><sub>92</sub>U + <sup>1</sup><sub>0</sub>n → <sup>141</sup><sub>56</sub>Ba + <sup>92</sup><sub>36</sub>Kr + 3 <sup>1</sup><sub>0</sub>n + energy'
+    },
+    secondary: {
+      fragments: [
+        { label: '¹⁴⁰Xe', mass: 140, r: 33, color: '#2563eb' },
+        { label: '⁹⁴Sr',  mass: 94,  r: 29, color: '#16a34a' }
+      ],
+      neutrons: 2,
+      equationHTML: '<sup>235</sup><sub>92</sub>U + <sup>1</sup><sub>0</sub>n → <sup>140</sup><sub>54</sub>Xe + <sup>94</sup><sub>38</sub>Sr + 2 <sup>1</sup><sub>0</sub>n + energy'
+    }
+  };
+
+  // ---------- Nucleus composition (visual: packed protons + neutrons) ----------
+  // Pre-generate positions once so it looks like a stable cluster.
+  const nucleusParticles = [];
+  (function buildNucleus() {
+    const count = 40; // visual density
+    for (let i = 0; i < count; i++) {
+      // Fibonacci-ish disc pack
+      const angle = i * 2.399963; // golden angle
+      const r = Math.sqrt(i / count) * (NUCLEUS.r - 10);
+      nucleusParticles.push({
+        angle, dist: r,
+        isProton: i % 3 === 0   // ~1/3 red protons, rest grey neutrons
+      });
+    }
+  })();
+
+  // ---------- Helpers ----------
+  function formatEquation() {
+    const r = REACTIONS[currentReaction || 'primary'];
+    equationText.innerHTML = r.equationHTML;
+  }
+
+  function initScene() {
+    state = 'idle';
+    incomingNeutron = null;
+    fragments = [];
+    releasedNeutrons = [];
+    energyFlash = 0;
+    energyRings = [];
+    splitProgress = 0;
+    currentReaction = null;
+    fireBtn.disabled = false;
+    secondBtn.disabled = true;
+    explainTitle.textContent = 'Watch what happens when a neutron hits U-235';
+    explainBody.innerHTML =
+      'A <strong>U-235 nucleus</strong> is shown in the centre, made up of many protons ' +
+      '(red +) and neutrons (grey 0). Press <em>Fire neutron</em> to launch a slow neutron ' +
+      'at it. When the neutron hits the nucleus, the U-235 <strong>splits into two smaller ' +
+      'daughter nuclei</strong>, releasing <strong>2–3 fast neutrons</strong> and a large ' +
+      'amount of <strong>energy</strong>.';
+  }
+
+  function fireNeutron(reactionKey) {
+    if (state !== 'idle') return;
+    state = 'incoming';
+    currentReaction = reactionKey;
+    incomingNeutron = { x: 40, y: NUCLEUS.y, vx: 2.4 };
+    fireBtn.disabled = true;
+    secondBtn.disabled = true;
+    formatEquation();
+    explainTitle.textContent = 'A slow neutron is on its way…';
+    explainBody.innerHTML =
+      'The yellow neutron is drifting toward the U-235 nucleus. When it reaches ' +
+      'the nucleus it will be absorbed, and the nucleus will split.';
+  }
+
+  function triggerSplit() {
+    state = 'splitting';
+    splitProgress = 0;
+    const R = REACTIONS[currentReaction];
+
+    // Fission fragments start at the centre, then shoot apart
+    const baseAngle = Math.random() * Math.PI * 2;
+    fragments = R.fragments.map((f, i) => {
+      const angle = baseAngle + (i === 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.4;
+      const speed = 1.6 + Math.random() * 0.6;
+      return {
+        x: NUCLEUS.x, y: NUCLEUS.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        r: f.r,
+        color: f.color,
+        label: f.label,
+        mass: f.mass,
+        angle: 0
+      };
+    });
+
+    // Release fast neutrons in all directions
+    releasedNeutrons = [];
+    for (let i = 0; i < R.neutrons; i++) {
+      const a = (Math.PI * 2 / R.neutrons) * i + Math.random() * 0.6;
+      const sp = 2.2 + Math.random() * 1.0;
+      releasedNeutrons.push({
+        x: NUCLEUS.x, y: NUCLEUS.y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 240
+      });
+    }
+
+    energyFlash = 50;
+    energyRings.push({ x: NUCLEUS.x, y: NUCLEUS.y, r: 20, life: 60, maxLife: 60 });
+
+    explainTitle.textContent = '💥 Fission! The nucleus has split';
+    explainBody.innerHTML =
+      'The U-235 nucleus has broken into <strong>two daughter nuclei</strong> ' +
+      '(' + R.fragments[0].label + ' and ' + R.fragments[1].label + '), releasing ' +
+      '<strong>' + R.neutrons + ' fast neutrons</strong> and a large amount of ' +
+      '<strong>energy</strong>. The fragments fly apart because they have huge ' +
+      '<strong>kinetic energy</strong>, which is quickly transferred to the surroundings ' +
+      'as <strong>thermal energy</strong>.';
+
+    setTimeout(() => {
+      state = 'done';
+      fireBtn.disabled = false;
+      secondBtn.disabled = false;
+    }, 1600);
+  }
+
+  // ---------- Physics ----------
+  function updatePhysics() {
+    if (paused) return;
+
+    if (state === 'incoming' && incomingNeutron) {
+      incomingNeutron.x += incomingNeutron.vx;
+      const dist = Math.hypot(incomingNeutron.x - NUCLEUS.x, incomingNeutron.y - NUCLEUS.y);
+      if (dist <= NUCLEUS.r + 6) {
+        incomingNeutron = null;
+        triggerSplit();
+      }
+    }
+
+    if (state === 'splitting' || state === 'done') {
+      // Move fragments outward, slowing gradually
+      for (const f of fragments) {
+        f.x += f.vx;
+        f.y += f.vy;
+        f.vx *= 0.985;
+        f.vy *= 0.985;
+        f.angle += 0.02;
+      }
+      // Move released neutrons
+      for (let i = releasedNeutrons.length - 1; i >= 0; i--) {
+        const n = releasedNeutrons[i];
+        n.x += n.vx;
+        n.y += n.vy;
+        n.life -= 1;
+        if (n.life <= 0) releasedNeutrons.splice(i, 1);
+      }
+    }
+
+    if (state === 'splitting') {
+      splitProgress = Math.min(1, splitProgress + 0.04);
+    }
+
+    if (energyFlash > 0) energyFlash -= 1;
+    for (let i = energyRings.length - 1; i >= 0; i--) {
+      energyRings[i].r += 3;
+      energyRings[i].life -= 1;
+      if (energyRings[i].life <= 0) energyRings.splice(i, 1);
+    }
+
+    time += 0.02;
+  }
+
+  // ---------- Drawing ----------
+  function drawBackground() {
+    // Subtle dot grid, like graph paper
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+    for (let x = 20; x < W; x += 30) {
+      for (let y = 20; y < H; y += 30) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawIntactNucleus() {
+    // Soft glow
+    const glow = ctx.createRadialGradient(NUCLEUS.x, NUCLEUS.y, NUCLEUS.r * 0.4, NUCLEUS.x, NUCLEUS.y, NUCLEUS.r * 1.6);
+    glow.addColorStop(0, 'rgba(148, 163, 184, 0.25)');
+    glow.addColorStop(1, 'rgba(148, 163, 184, 0)');
+    ctx.beginPath();
+    ctx.arc(NUCLEUS.x, NUCLEUS.y, NUCLEUS.r * 1.6, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+
+    // Outer cluster boundary
+    ctx.beginPath();
+    ctx.arc(NUCLEUS.x, NUCLEUS.y, NUCLEUS.r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Packed particles (protons + neutrons)
+    for (const p of nucleusParticles) {
+      const px = NUCLEUS.x + Math.cos(p.angle) * p.dist;
+      const py = NUCLEUS.y + Math.sin(p.angle) * p.dist;
+      ctx.beginPath();
+      ctx.arc(px, py, 5.5, 0, Math.PI * 2);
+      if (p.isProton) {
+        ctx.fillStyle = '#ef4444';
+      } else {
+        ctx.fillStyle = '#94a3b8';
+      }
+      ctx.fill();
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // + or nothing
+      if (p.isProton) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 8px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('+', px, py);
+      }
+    }
+
+    // Label
+    ctx.font = 'bold 14px Arial';
+    ctx.fillStyle = '#0f172a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('²³⁵U nucleus', NUCLEUS.x, NUCLEUS.y + NUCLEUS.r + 10);
+    ctx.font = '11px Arial';
+    ctx.fillStyle = '#64748b';
+    ctx.fillText('(92 protons, 143 neutrons)', NUCLEUS.x, NUCLEUS.y + NUCLEUS.r + 28);
+  }
+
+  function drawIncomingNeutron() {
+    if (!incomingNeutron) return;
+    drawNeutronDot(incomingNeutron.x, incomingNeutron.y, 6, 1);
+  }
+
+  function drawNeutronDot(x, y, r, alpha) {
+    // Glow
+    ctx.beginPath();
+    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(250, 204, 21, ${alpha * 0.25})`;
+    ctx.fill();
+    // Body
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(250, 204, 21, ${alpha})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(180, 140, 10, ${alpha})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawFragments() {
+    for (const f of fragments) {
+      // Cluster boundary circle
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      ctx.fillStyle = hexWithAlpha(f.color, 0.22);
+      ctx.fill();
+      ctx.strokeStyle = f.color;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Small packed protons/neutrons inside the fragment
+      const particleCount = Math.round(f.r / 4);
+      for (let i = 0; i < particleCount; i++) {
+        const a = i * 2.4 + f.angle;
+        const dist = (Math.sqrt(i / particleCount) * (f.r - 8));
+        const px = f.x + Math.cos(a) * dist;
+        const py = f.y + Math.sin(a) * dist;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = i % 3 === 0 ? '#ef4444' : '#94a3b8';
+        ctx.fill();
+      }
+
+      // Label
+      ctx.fillStyle = f.color;
+      ctx.font = 'bold 13px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(f.label, f.x, f.y + f.r + 14);
+      ctx.font = '10px Arial';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('daughter nucleus', f.x, f.y + f.r + 28);
+    }
+  }
+
+  function hexWithAlpha(hex, a) {
+    const r = parseInt(hex.slice(1,3), 16);
+    const g = parseInt(hex.slice(3,5), 16);
+    const b = parseInt(hex.slice(5,7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+
+  function drawReleasedNeutrons() {
+    for (const n of releasedNeutrons) {
+      const alpha = Math.min(1, n.life / 60);
+      drawNeutronDot(n.x, n.y, 5, alpha);
+    }
+  }
+
+  function drawEnergy() {
+    // Flash at split point
+    if (energyFlash > 0) {
+      const a = energyFlash / 50;
+      const grad = ctx.createRadialGradient(NUCLEUS.x, NUCLEUS.y, 0, NUCLEUS.x, NUCLEUS.y, 120);
+      grad.addColorStop(0, `rgba(253, 224, 71, ${a * 0.7})`);
+      grad.addColorStop(1, `rgba(253, 224, 71, 0)`);
+      ctx.beginPath();
+      ctx.arc(NUCLEUS.x, NUCLEUS.y, 120, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    // Expanding rings
+    for (const ring of energyRings) {
+      const a = ring.life / ring.maxLife;
+      ctx.beginPath();
+      ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(250, 204, 21, ${a})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // Energy caption right after split
+    if (state === 'splitting' && splitProgress > 0.3) {
+      const a = Math.min(1, (splitProgress - 0.3) / 0.5);
+      ctx.font = 'bold 16px Arial';
+      ctx.fillStyle = `rgba(185, 28, 28, ${a})`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('energy released', NUCLEUS.x, NUCLEUS.y + 110);
+      ctx.font = '12px Arial';
+      ctx.fillStyle = `rgba(127, 29, 29, ${a * 0.9})`;
+      ctx.fillText('kinetic energy of fragments → thermal energy', NUCLEUS.x, NUCLEUS.y + 132);
+    }
+  }
+
+  function drawEquationOverlay() {
+    // The equation bar is drawn in HTML, not canvas. Nothing here.
+  }
+
+  function drawLabels() {
+    // Static labels for clarity
+    ctx.font = '11px Arial';
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('neutron enters from left →', 160, NUCLEUS.y + NUCLEUS.r + 70);
+  }
+
+  // ---------- Main loop ----------
+  let lastTime = 0;
+  const FIXED_DT = 16;
+  let accumulator = 0;
+
+  function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = Math.min(100, timestamp - lastTime);
+    lastTime = timestamp;
+
+    if (!paused) {
+      accumulator += dt;
+      while (accumulator >= FIXED_DT) {
+        updatePhysics();
+        accumulator -= FIXED_DT;
+      }
+    }
+
+    // Render
+    drawBackground();
+
+    if (state === 'idle' || state === 'incoming') {
+      drawIntactNucleus();
+      drawIncomingNeutron();
+    } else {
+      drawFragments();
+      drawReleasedNeutrons();
+      drawEnergy();
+    }
+
+    drawLabels();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Interaction ----------
+  fireBtn.addEventListener('click', () => fireNeutron('primary'));
+  secondBtn.addEventListener('click', () => fireNeutron('secondary'));
+  resetBtn.addEventListener('click', () => {
+    paused = false;
+    pauseBtn.textContent = '⏸ Pause';
+    initScene();
+  });
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  });
+  equationBtn.addEventListener('click', () => {
+    equationBar.classList.toggle('visible');
+    equationBtn.classList.toggle('on');
+    if (equationBar.classList.contains('visible')) {
+      equationBtn.textContent = 'Hide equation';
+      formatEquation();
+    } else {
+      equationBtn.textContent = 'Show equation';
+    }
+  });
+
+  // ---------- Init ----------
+  initScene();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
