@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Conservation of Momentum</title>
+  <style>
+    body { background-color: #0b1d3a; color: #ffffff; font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 12px; }
+    h1 { color: #ffd23f; font-size: 24px; margin: 0 0 4px 0; }
+    .subtitle { color: #9fd3ff; font-size: 13px; margin: 0 0 10px 0; }
+    .mode-buttons { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+    .mode-btn { font-family: Arial; font-size: 14px; font-weight: bold; padding: 8px 20px; border: none; border-radius: 8px; cursor: pointer; background-color: #4a5a7c; color: #fff; }
+    .mode-btn.active { background-color: #ffd23f; color: #0b1d3a; }
+    canvas { background-color: #060f22; border-radius: 12px; display: block; margin: 0 auto 10px auto; border: 2px solid #3a5a8c; }
+    .controls { display: flex; justify-content: center; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+    .car-controls { background-color: #132a4f; border-radius: 10px; padding: 10px 14px; min-width: 200px; }
+    .car-controls h3 { margin: 0 0 6px 0; font-size: 14px; }
+    .car1 h3 { color: #ff6b6b; } .car2 h3 { color: #6db8ff; }
+    .ctrl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+    .ctrl-row label { color: #9fd3ff; min-width: 60px; text-align: left; }
+    .ctrl-row input[type="range"] { width: 100px; accent-color: #ffd23f; }
+    .ctrl-row span { color: #ffd23f; font-weight: bold; min-width: 45px; text-align: right; }
+    
+    .action-bar { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+    button.action { font-family: Arial; font-size: 14px; font-weight: bold; padding: 8px 20px; border: none; border-radius: 8px; cursor: pointer; color: #0b1d3a; background-color: #ffd23f; }
+    button.action:disabled { background-color: #4a5a7c; color: #9fb0cc; }
+    
+    #pauseBtn { background-color: #4ea8de; color: #ffffff; display: none; }
+    #pauseBtn.active { background-color: #e63946; }
+
+    .panel { display: inline-block; background-color: #132a4f; border-radius: 10px; padding: 10px 20px; margin-bottom: 10px; font-size: 13px; text-align: left; max-width: 750px; }
+    .row { margin: 3px 0; }
+    .row .label { font-weight: bold; }
+    .before .label { color: #6db8ff; } .after .label { color: #7be495; }
+    .row .eq { color: #ffd23f; font-family: 'Courier New'; font-weight: bold; margin-left: 6px; }
+    .check { color: #7be495; font-weight: bold; margin-top: 4px; }
+    .check.warn { color: #ff8c42; }
+    .takeaway { display: inline-block; background-color: #1c3d6e; border: 2px solid #ffd23f; border-radius: 10px; padding: 8px 18px; font-size: 13px; max-width: 750px; }
+    .takeaway strong { color: #ffd23f; }
+  </style>
+</head>
+<body>
+  <h1>Conservation of Momentum</h1>
+  <p class="subtitle">Two cars collide — total momentum is conserved</p>
+  <div class="mode-buttons">
+    <button id="mElastic" class="mode-btn active">Elastic (bounce)</button>
+    <button id="mInelastic" class="mode-btn">Inelastic (stick)</button>
+  </div>
+  <canvas id="canvas" width="700" height="250"></canvas>
+  <div class="controls">
+    <div class="car-controls car1">
+      <h3>Car 1 (red)</h3>
+      <div class="ctrl-row"><label>m₁</label><input type="range" id="m1" min="1" max="10" value="4"><span id="m1v">4 kg</span></div>
+      <div class="ctrl-row"><label>u₁</label><input type="range" id="u1" min="-5" max="5" value="3"><span id="u1v">+3</span></div>
+    </div>
+    <div class="car-controls car2">
+      <h3>Car 2 (blue)</h3>
+      <div class="ctrl-row"><label>m₂</label><input type="range" id="m2" min="1" max="10" value="6"><span id="m2v">6 kg</span></div>
+      <div class="ctrl-row"><label>u₂</label><input type="range" id="u2" min="-5" max="5" value="-2"><span id="u2v">−2</span></div>
+    </div>
+  </div>
+  
+  <div class="action-bar">
+    <button id="startBtn" class="action">Start</button>
+    <button id="pauseBtn" class="action">Pause</button>
+    <button id="resetBtn" class="action">Reset</button>
+  </div>
+
+  <div class="panel">
+    <div class="row before"><span class="label">Momentum BEFORE:</span><span class="eq" id="pB">m₁u₁ + m₂u₂ = ?</span></div>
+    <div class="row after"><span class="label">Momentum AFTER:</span><span class="eq" id="pA">m₁v₁ + m₂v₂ = ?</span></div>
+    <div class="check" id="chk">↑ Press Start</div>
+  </div>
+  <div class="takeaway" id="takeaway"></div>
+  <script>
+    var canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    var SCALE = 21, SX1 = 100, SX2 = W-100, CW = 80, CH = 40, CY = 180;
+    
+    var car1 = { x: SX1, mass: 4, u: 3, v: 0, color: '#e63946', name: 'Car 1' };
+    var car2 = { x: SX2, mass: 6, u: -2, v: 0, color: '#4ea8de', name: 'Car 2' };
+    var state = 'ready', mode = 'elastic', flash = 0, flashX = 0;
+    var isPaused = false;
+
+    function fn(v) { if (Math.abs(v)<0.05) return '0'; return (v<0?'−':'+') + (Math.abs(v)%1===0?Math.abs(v):Math.abs(v).toFixed(1)); }
+    function fp(v) { if (Math.abs(v)<0.05) return '0'; return (v<0?'−':'') + (Math.abs(v)%1===0?Math.abs(v):Math.abs(v).toFixed(1)); }
+
+    function calcFinals() {
+      var m1=car1.mass, u1=car1.u, m2=car2.mass, u2=car2.u;
+      if (mode === 'elastic') {
+        car1.v = ((m1-m2)*u1 + 2*m2*u2) / (m1+m2);
+        car2.v = ((m2-m1)*u2 + 2*m1*u1) / (m1+m2);
+      } else {
+        var vc = (m1*u1 + m2*u2) / (m1+m2);
+        car1.v = vc; car2.v = vc;
+      }
+    }
+
+    function rr(x,y,w,h,r) { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r); ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h); ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r); ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath(); }
+
+    function drawCar(c) {
+      var l = c.x - CW/2, t = CY - CH/2, b = t + CH;
+      ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(l+CW*0.25,b,7,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(l+CW*0.75,b,7,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = c.color; rr(l,t,CW,CH,6); ctx.fill();
+      ctx.fillStyle = '#c8d8f0'; rr(l+CW*0.2,t+6,CW*0.25,CH*0.35,2); ctx.fill(); rr(l+CW*0.55,t+6,CW*0.25,CH*0.35,2); ctx.fill();
+      
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 12px Arial';
+      if (state === 'ready' || state === 'moving') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('u = ' + fn(c.u) + ' m/s', c.x, CY - CH/2 - 12);
+      } else if (state === 'collided') {
+        ctx.fillStyle = '#7be495';
+        ctx.fillText('v = ' + fn(c.v) + ' m/s', c.x, CY - CH/2 - 12);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = '#1e2f4f'; ctx.fillRect(0, CY+CH/2+8, W, 16);
+      
+      if (mode === 'inelastic' && state === 'collided') {
+        drawCar(car1); drawCar(car2);
+        ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(car1.x + CW/2, CY); ctx.lineTo(car2.x - CW/2, CY); ctx.stroke();
+      } else {
+        drawCar(car1); drawCar(car2);
+      }
+
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'left'; ctx.fillStyle = '#e63946'; ctx.fillText('Car 1', 20, 25);
+      ctx.fillStyle = '#fff'; ctx.font = '13px Arial'; ctx.fillText('m₁ = '+car1.mass+' kg', 20, 45);
+      ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 13px Arial'; ctx.fillText('u₁ = '+fn(car1.u)+' m/s', 20, 65);
+      if (state === 'collided') { ctx.fillStyle = '#7be495'; ctx.fillText('v₁ = '+fn(car1.v)+' m/s', 20, 85); }
+      
+      ctx.textAlign = 'right'; ctx.fillStyle = '#4ea8de'; ctx.font = 'bold 14px Arial'; ctx.fillText('Car 2', W-20, 25);
+      ctx.fillStyle = '#fff'; ctx.font = '13px Arial'; ctx.fillText('m₂ = '+car2.mass+' kg', W-20, 45);
+      ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 13px Arial'; ctx.fillText('u₂ = '+fn(car2.u)+' m/s', W-20, 65);
+      if (state === 'collided') { ctx.fillStyle = '#7be495'; ctx.fillText('v₂ = '+fn(car2.v)+' m/s', W-20, 85); }
+
+      if (flash > 0) {
+        var a = flash/0.5, r = 25+(1-a)*60;
+        var g = ctx.createRadialGradient(flashX, CY, 0, flashX, CY, r);
+        g.addColorStop(0,'rgba(255,230,100,'+(a*0.9)+')'); g.addColorStop(1,'rgba(255,200,80,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(flashX, CY, r, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,240,150,'+a+')'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.fillText('BOOM!', flashX, CY-60);
+      }
+
+      ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+      ctx.fillStyle = mode === 'elastic' ? '#7be495' : '#ff8c42';
+      ctx.fillText(mode === 'elastic' ? 'ELASTIC' : 'INELASTIC', W/2, 18);
+
+      if (isPaused) {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 30px Arial';
+        ctx.fillText('PAUSED', W/2, H/2 - 20);
+      }
+    }
+
+    function update(dt) {
+      if (isPaused) return;
+      if (state === 'moving') {
+        car1.x += car1.u*SCALE*dt; car2.x += car2.u*SCALE*dt;
+        if (Math.abs(car2.x - car1.x) <= CW) {
+          var m = (car1.x+car2.x)/2; car1.x = m-CW/2; car2.x = m+CW/2;
+          flashX = m; flash = 0.5; state = 'collided';
+          calcFinals(); updatePanel();
+        }
+      } else if (state === 'collided') {
+        car1.x += car1.v*SCALE*dt; car2.x += car2.v*SCALE*dt;
+      }
+      if (flash > 0) flash -= dt;
+    }
+
+    function updatePanel() {
+      var pB = car1.mass*car1.u + car2.mass*car2.u;
+      document.getElementById('pB').textContent = 'm₁u₁ + m₂u₂ = ('+car1.mass+')×('+fp(car1.u)+') + ('+car2.mass+')×('+fp(car2.u)+') = '+fp(pB)+' kg m/s';
+      var chk = document.getElementById('chk');
+      if (state === 'collided') {
+        var pA = car1.mass*car1.v + car2.mass*car2.v;
+        document.getElementById('pA').textContent = 'm₁v₁ + m₂v₂ = ('+car1.mass+')×('+fp(car1.v)+') + ('+car2.mass+')×('+fp(car2.v)+') = '+fp(pA)+' kg m/s';
+        chk.textContent = '✓ Momentum conserved: '+fp(pB)+' = '+fp(pA);
+        chk.classList.remove('warn');
+      } else {
+        document.getElementById('pA').textContent = 'm₁v₁ + m₂v₂ = ? (press Start)';
+        chk.textContent = '↑ Press Start'; chk.classList.remove('warn');
+      }
+    }
+
+    function updateTakeaway() {
+      var t = document.getElementById('takeaway');
+      if (mode === 'elastic') {
+        t.innerHTML = '<strong>Exam takeaway:</strong> In a collision, total momentum is conserved: m₁u₁ + m₂u₂ = m₁v₁ + m₂v₂ (elastic = bounce apart).';
+      } else {
+        t.innerHTML = '<strong>Exam takeaway:</strong> In a collision, total momentum is conserved: m₁u₁ + m₂u₂ = m₁v₁ + m₂v₂ (inelastic = stick together).';
+      }
+    }
+
+    function refresh() {
+      document.getElementById('m1v').textContent = car1.mass+' kg';
+      document.getElementById('m2v').textContent = car2.mass+' kg';
+      document.getElementById('u1v').textContent = fn(car1.u);
+      document.getElementById('u2v').textContent = fn(car2.u);
+      updatePanel();
+    }
+
+    function setEnabled(en) {
+      ['m1','u1','m2','u2'].forEach(function(id) { document.getElementById(id).disabled = !en; });
+    }
+
+    function reset() {
+      state = 'ready'; isPaused = false;
+      car1.x = SX1; car2.x = SX2; car1.v = 0; car2.v = 0; flash = 0;
+      setEnabled(true); 
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('pauseBtn').style.display = 'none';
+      document.getElementById('pauseBtn').textContent = 'Pause';
+      document.getElementById('pauseBtn').classList.remove('active');
+      updatePanel(); updateTakeaway();
+    }
+
+    function start() {
+      if (state !== 'ready') return;
+      if (car1.u <= car2.u) {
+        var c = document.getElementById('chk');
+        c.textContent = '⚠ Cars will not collide — set u₁ larger than u₂'; c.classList.add('warn');
+        return;
+      }
+      calcFinals(); state = 'moving'; setEnabled(false);
+      document.getElementById('startBtn').disabled = true; 
+      document.getElementById('pauseBtn').style.display = 'block';
+      updatePanel();
+    }
+
+    function togglePause() {
+      if (state !== 'moving' && state !== 'collided') return;
+      isPaused = !isPaused;
+      var btn = document.getElementById('pauseBtn');
+      btn.textContent = isPaused ? 'Play' : 'Pause';
+      btn.classList.toggle('active', isPaused);
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('mElastic').classList.toggle('active', m === 'elastic');
+      document.getElementById('mInelastic').classList.toggle('active', m === 'inelastic');
+      reset();
+    }
+
+    document.getElementById('m1').addEventListener('input', function(e) { car1.mass = parseInt(e.target.value); refresh(); });
+    document.getElementById('u1').addEventListener('input', function(e) { car1.u = parseInt(e.target.value); refresh(); });
+    document.getElementById('m2').addEventListener('input', function(e) { car2.mass = parseInt(e.target.value); refresh(); });
+    document.getElementById('u2').addEventListener('input', function(e) { car2.u = parseInt(e.target.value); refresh(); });
+    document.getElementById('startBtn').addEventListener('click', start);
+    document.getElementById('pauseBtn').addEventListener('click', togglePause);
+    document.getElementById('resetBtn').addEventListener('click', reset);
+    document.getElementById('mElastic').addEventListener('click', function() { setMode('elastic'); });
+    document.getElementById('mInelastic').addEventListener('click', function() { setMode('inelastic'); });
+
+    var last = performance.now();
+    function loop() {
+      var now = performance.now(), dt = (now-last)/1000; last = now; if (dt > 0.1) dt = 0.1;
+      update(dt); draw(); requestAnimationFrame(loop);
+    }
+    refresh(); updateTakeaway(); loop();
+  </script>
+</body>
+</html>
